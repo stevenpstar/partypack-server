@@ -1,9 +1,6 @@
 package mugshots
 
 import (
-	"encoding/json"
-	"fmt"
-
 	"fake.com/pkg/logic"
 	"fake.com/pkg/types"
 )
@@ -11,11 +8,11 @@ import (
 func GetPlayerImageData(clients map[*types.Client]bool) logic.AllData {
   var allData = GetAllData(clients)
   logic.Pair(allData)
-  b, err := json.Marshal(allData)
-  if err != nil {
-    fmt.Println("Error printing allData")
-  }
-  fmt.Println(string(b))
+//  b, err := json.Marshal(allData)
+//  if err != nil {
+//    fmt.Println("Error printing allData")
+//  }
+//  fmt.Println(string(b))
   return allData
 }
 
@@ -34,13 +31,8 @@ func GetPlayerPromptData(clients map[int]*types.Client, allData logic.AllData) m
     for imageId, _ := range pImages {
       // id of the client (player) this image belongs to
       var id = pImages[imageId]
-      // if the id exists in the map then add to it, otherwise create it
-     // if _, exists := promptMap[id]; exists {
-     //   var peePrompt = createPeePrompt(clients, allData.Players[p].PlayerId, p)
-     //   promptMap[id] = append(promptMap[id], peePrompt)
-     // } 
-     var peePrompt = createPeePrompt(clients, allData.Players[p].PlayerId, p)
-     promptMap[id] = append(promptMap[id], peePrompt)
+      var peePrompt = createPeePrompt(clients, allData.Players[p].PlayerId, imageId)
+      promptMap[id] = append(promptMap[id], peePrompt)
     }
   }
 

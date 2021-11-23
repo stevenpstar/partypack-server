@@ -44,6 +44,8 @@ var votedClients map[int]bool
 // these are the ids of the clients whose prompts are up for voting
 var nonVotingClients []int 
 
+var currentMessage types.MessageBody
+
 type Prompts struct {
   Prompts []Prompt
 }
@@ -92,6 +94,8 @@ func (m MugshotsGL) CheckAllPlayersAreState(pool *types.Pool, state int) bool {
 	var allPlayers = true
 	for c := range pool.Clients {
 		if c.State != state && c.ID != 0 {
+      fmt.Println("Player not at state")
+      fmt.Println(c.Name)
 			allPlayers = false
 			break
 		}
@@ -143,7 +147,9 @@ func (m MugshotsGL) HandleMessage(message types.Message, pool *types.Pool) {
       break
     case PLAYER_PROMPT:
       HandlePlayerPrompt(pool.Clients, message.Body.Body)
+      fmt.Println("Received player prompt")
       if m.CheckAllPlayersAreState(pool, FIRST_PROMPT) {
+          fmt.Println("All players promptin")
           // we need to set the sub-state to voting
           prompt_state = WAITING
           voting_count = 0
@@ -155,11 +161,14 @@ func (m MugshotsGL) HandleMessage(message types.Message, pool *types.Pool) {
           // send message to alert clients / players that it is time to vote!
           // this should actually just send a message to the game client to
           // start displaying the first prompt
-          for p := range allData.Players {
-            if (prompt_state == WAITING) {
-              var message = CreatePromptMessage(promptData, mugshotCount)
-            }
+         // for p := range allData.Players {
+          if (prompt_state == WAITING) {
+            currentMessage = CreatePromptMessage(promptData, voting_count, mappedClients,
+              0, "VOTESEND")
+            mappedClients[0].Conn.WriteJSON(types.Message{Type: 2,
+              Body: currentMessage})
           }
+          //}
 
       }
       break

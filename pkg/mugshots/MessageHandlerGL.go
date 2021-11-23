@@ -1,7 +1,6 @@
 package mugshots
 
 import (
-	"encoding/json"
 	"fmt"
 	"strconv"
 
@@ -56,7 +55,7 @@ func AddImageToPlayer(clients map[*types.Client]bool, player_id string, image_da
 
 func AddPromptsToPlayer(clients map[*types.Client]bool, player_id string, prompt_one string, prompt_two string) {
   for client, _ := range clients {
-    if client.Name == player_id && client.State == START {
+    if client.Name == player_id && client.State == FIRST_IMG {
       client.Prompts = append(client.Prompts, prompt_one)
       client.Prompts = append(client.Prompts, prompt_two)
       client.State = FIRST_PROMPT
@@ -80,17 +79,6 @@ func HandlePlayerPrompt(clients map[*types.Client]bool, body []types.Action) {
       prompt_two = element.Data
     }
   }
-//  for _, element := range body {
-//    if element.Name == PROMPTONE {
-//      prompt_one = element.Data
-//    }
-//  }
-//
-//  for _, element := range body {
-//    if element.Name == PROMPTTWO {
-//      prompt_two = element.Data
-//    }
-//  }
 
   AddPromptsToPlayer(clients, player_id, prompt_one, prompt_two)
 }
@@ -103,13 +91,6 @@ func CreateImageMessage(allData logic.AllData, mappedClients map[int]*types.Clie
   image1.Name = "MSImage1"
   image1.Data = mappedClients[allData.Players[player].Images[0]].Images[image_index]
 
-  // b, b_err := json.Marshal(mappedClients[allData.Players[player].Images[0]].Images)
-  // if b_err != nil { 
-  //   fmt.Println(b_err)
-  // }
-  // fmt.Println("What is b?")
-  // fmt.Println(string(b))
-
   actions = append(actions, image1)
 
   var image2 types.Action
@@ -121,7 +102,7 @@ func CreateImageMessage(allData logic.AllData, mappedClients map[int]*types.Clie
   return types.MessageBody{Body: actions, Command: command}
 }
 
-func CreatePromptMessage(promptData map[int][]PeePrompt, mugshotCount int, 
+func CreatePromptMessage(promptData map[int][]PeePrompt, voting_count int, 
   mappedClients map[int]*types.Client, image_index int, command string) types.MessageBody {
   var image_data = "" // image to be sent to front end again
 
@@ -131,12 +112,19 @@ func CreatePromptMessage(promptData map[int][]PeePrompt, mugshotCount int,
   var player_two_id = ""
   var player_two_prompt = ""
   var counter = 0
+  fmt.Println("Looping over clients in promptData now")
+  fmt.Println("voting_count")
+  fmt.Println(voting_count)
   for client, _ := range promptData {
+    fmt.Println("client is")
+    fmt.Println(client)
     if client == 0 {
       // it should never get here but just in case
       continue
     }
-    if counter != mugshotCount {
+    if counter != voting_count {
+      fmt.Println("counter is ")
+      fmt.Println(counter)
       counter++
       continue
     }
@@ -145,6 +133,8 @@ func CreatePromptMessage(promptData map[int][]PeePrompt, mugshotCount int,
     //player one data
     player_one_id = strconv.Itoa(promptData[client][0].PlayerID)
     player_one_prompt = promptData[client][0].Prompt
+    fmt.Println("Player one prompt?")
+    fmt.Println(player_one_prompt)
     //player two data
     player_two_id = strconv.Itoa(promptData[client][1].PlayerID)
     player_two_prompt = promptData[client][1].Prompt
