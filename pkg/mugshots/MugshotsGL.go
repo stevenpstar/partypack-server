@@ -23,6 +23,7 @@ const (
   PLAYER_IMAGE  string = "PI"
   PLAYER_PROMPT string = "PD"
   PROMPT_VOTE   string = "PV"
+  VOTE_START    string = "VS"
 )
 
 // Prompt State sub-state
@@ -39,8 +40,8 @@ var mugshotCount int
 // voting vars to keep track of voting rounds
 var prompt_state = WAITING
 var voting_count = 0
-// all clients (id) and if they have voted
-var votedClients map[int]bool 
+// all clients (id) and who they have voted for, -1 if they haven't voted
+var votedClients map[int]int 
 // these are the ids of the clients whose prompts are up for voting
 var nonVotingClients []int 
 
@@ -125,11 +126,11 @@ func (m MugshotsGL) HandleMessage(message types.Message, pool *types.Pool) {
         mappedClients = MapClients(pool.Clients)
 
         for p := range allData.Players {
-          var message = CreateImageMessage(allData, mappedClients, p,  0, "PRMPT1")
+          var imageMessage = CreateImageMessage(allData, mappedClients, p,  0, "PRMPT1")
      
           var _C = mappedClients[allData.Players[p].PlayerId]
           _C.Conn.WriteJSON(types.Message{Type: 2,
-            Body: message})
+            Body: imageMessage})
         }
       } else if m.CheckAllPlayersAreState(pool, SECOND_IMG) {
         // returns paired data
@@ -137,11 +138,11 @@ func (m MugshotsGL) HandleMessage(message types.Message, pool *types.Pool) {
         mappedClients = MapClients(pool.Clients)
 
         for p := range allData.Players {
-          var message = CreateImageMessage(allData, mappedClients, p, 1, "PRMPT2")
+          var imageMessage = CreateImageMessage(allData, mappedClients, p, 1, "PRMPT2")
 
           var _C = mappedClients[allData.Players[p].PlayerId]
           _C.Conn.WriteJSON(types.Message{Type: 2,
-            Body: message})
+            Body: imageMessage})
         }
       }
       break
@@ -155,29 +156,86 @@ func (m MugshotsGL) HandleMessage(message types.Message, pool *types.Pool) {
           voting_count = 0
  //       allData = GetPlayerPromptData(pool.Clients)
           mappedClients = MapClients(pool.Clients)
-          votedClients = ResetVotedClients(pool.Clients)
           var promptData = GetPlayerPromptData(mappedClients, pairedAllData)
           nonVotingClients = AddNonVotingClients(promptData)
-          // send message to alert clients / players that it is time to vote!
-          // this should actually just send a message to the game client to
-          // start displaying the first prompt
-         // for p := range allData.Players {
+          votedClients = ResetVotedClients(pool.Clients, nonVotingClients)
           if (prompt_state == WAITING) {
             currentMessage = CreatePromptMessage(promptData, voting_count, mappedClients,
               0, "VOTESEND")
             mappedClients[0].Conn.WriteJSON(types.Message{Type: 2,
               Body: currentMessage})
           }
-          //}
-
       }
       break
+    case VOTE_START:
+      currentMessage.Command = "START_VOTE"
+      // we are going to create a "waiting" message, for players who can't vote this round
+      var waiting_actions []types.Action
+      var waitAction types.Action
+      waitAction.Name = "WAIT_VOTING"
+      waitAction.Data = "WAIT"
+      waiting_actions = append(waiting_actions, waitAction)
+      var waitMessage = types.MessageBody{Body: waiting_actions, Command: "WAITVOTE"}
+
+      for _C := range pool.Clients {
+        if logic.Contains(nonVotingClients, _C.ID) {
+
+          _C.Conn.WriteJSON(types.Message{Type: 2,
+            Body: waitMessage})
+
+        } else {
+          _C.Conn.WriteJSON(types.Message{Type: 2,
+            Body: currentMessage})
+        }
+      }
     case PROMPT_VOTE:
       // just in case this happens somehow, don't actually do anything
       if prompt_state != VOTING {
+        var player_id = -1
+        var voted_id = -1
+        var player_name = ""
+        //get id of the player who voted
+        var voting_data = message.Body.Body
+        for vd := range voting_data {
+          // for now we are not checking for errors, TODO We should remedy that
+          if voting_data[vd].Name == "PlayerName" {
+            player_name = voting_data[vd].Data
+            player_id = GetClientIdByName(player_name, pool.Clients)
+          } else if voting_data[vd].Name == "prompt_vote" {
+            voted_id, _ = strconv.Atoi(voting_data[vd].Data)
+          }
+        }
+
+        if player_id != -1 && voted_id != -1 {
+          PlayerVote(player_id, voted_id)
+          var votedMessage = CreateVoteMessage(player_id, voted_id, "PLAYER_VOTE")
+          // send message to game client that player_id has voted for voted_id
+
+          for client := range pool.Clients {
+            // Game Client Id will always be 0
+            if client.ID == 0 {
+              fmt.Println("Found game client, sending message")
+              client.Conn.WriteJSON(types.Message{Type: 2,
+                Body: votedMessage})
+            }
+          }
+                   
+          if HaveAllPlayersVoted() {
+            // send message to game client that all votes are in
+            for client := range pool.Clients {
+              // Game Client Id will always be 0
+              if client.ID == 0 {
+                fmt.Println("Found game client, sending message 2")
+                client.Conn.WriteJSON(types.Message{Type: 2, 
+                  Body: types.MessageBody{Body: nil, Command: "ALLVOTED"}})
+              }
+            }
+          }
+        } else {
+          fmt.Println("Error with player vote")
+        }
         break
       }
-      
       break
   }
   for client, _ := range pool.Clients {
@@ -185,6 +243,54 @@ func (m MugshotsGL) HandleMessage(message types.Message, pool *types.Pool) {
       return
     }
   }
+}
+
+func PlayerVote(player_id int, voted_id int) {
+  for player := range votedClients {
+    if player == player_id {
+      votedClients[player_id] = voted_id
+      break
+    }
+  }
+}
+
+func GetClientIdByName(name string, clients map[*types.Client]bool) int {
+  for client := range clients {
+    if client.Name == name {
+      return client.ID
+    }
+  }
+  return -1
+}
+
+func CreateVoteMessage(player_id int, voted_id int, command string) types.MessageBody {
+  var actions []types.Action
+  var player_voted types.Action
+  player_voted.Name = "PLAYER_VOTED"
+  player_voted.Data = strconv.Itoa(player_id)
+
+  var voted_for types.Action
+  voted_for.Name = "VOTED_FOR"
+  voted_for.Data = strconv.Itoa(voted_id)
+
+  actions = append(actions, player_voted)
+  actions = append(actions, voted_for)
+
+  return types.MessageBody{Body: actions, Command: command}
+}
+
+func HaveAllPlayersVoted() bool {
+  var allVoted = true
+  if len(votedClients) <= 0 {
+    allVoted = false
+    return allVoted
+  }
+  for player, voted := range votedClients {
+    if player <= 1 || voted <= 1 {
+      allVoted = false
+    }
+  }
+  return allVoted
 }
 
 func GetUnusedId(pool *types.Pool) int {
@@ -214,10 +320,13 @@ func MapClients(clients map[*types.Client]bool) map[int]*types.Client {
     return mappedClients
 }
 
-func ResetVotedClients(clients map[*types.Client]bool) map[int]bool {
-  var mappedClients = make(map[int]bool)
+func ResetVotedClients(clients map[*types.Client]bool, nonVotingClients []int) map[int]int {
+  var mappedClients = make(map[int]int)
   for client, _ := range clients {
-    mappedClients[client.ID] = false
+    if logic.Contains(nonVotingClients, client.ID) || client.ID == 0 {
+      continue
+    }
+    mappedClients[client.ID] = -1
   }
   return mappedClients
 }
@@ -226,7 +335,7 @@ func AddNonVotingClients(clients map[int][]PeePrompt) []int {
   var nonVotingClients []int
   var count = 0
   for client, _ := range clients {
-    if count != mugshotCount {
+    if count != voting_count {
       count++
       continue
     }

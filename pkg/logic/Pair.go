@@ -68,7 +68,7 @@ func Pair(data AllData) {
 			for p := index; p < len(players); p++ {
 
 				if images[imgIndex].PlayerId != players[p].PlayerId {
-					if !contains(players[p].Images, images[imgIndex].PlayerId) {
+					if !Contains(players[p].Images, images[imgIndex].PlayerId) {
 						// attaching player to image
 						images[imgIndex].Paired = append(images[imgIndex].Paired, players[p].PlayerId)
 						// attaching image to player
@@ -95,7 +95,7 @@ func Pair(data AllData) {
 	}
 }
 
-func contains(s []int, e int) bool {
+func Contains(s []int, e int) bool {
 	for _, a := range s {
 		if a == e {
 			return true
