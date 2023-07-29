@@ -1,11 +1,10 @@
 package mugshots
 
 import (
-	"fmt"
 	"strconv"
-
 	"fake.com/pkg/logic"
 	"fake.com/pkg/types"
+  "fmt"
 )
 
 // Message Names (indicating type of data associated with this action)
@@ -16,7 +15,10 @@ const (
   PROMPTTWO string = "prompt2"
 )
 
-func HandlePlayerImage(clients map[*types.Client]bool, body []types.Action, pImage []PlayerImage) {
+func HandlePlayerImage(clients map[*types.Client]bool, 
+  body []types.Action, 
+  pImage []PlayerImage) {
+
   var player_id = "" // init empty string
   var image_data = ""
   for _, element := range body {
@@ -102,8 +104,13 @@ func CreateImageMessage(allData logic.AllData, mappedClients map[int]*types.Clie
   return types.MessageBody{Body: actions, Command: command}
 }
 
+// This seems to be creating the message that will be sent to the front end
+// During the voting round, a single image and two (different) player prompts.
+// * We are changing this to send all vote information for the round... because
+// why the fuck not? *
 func CreatePromptMessage(promptData map[int][]PeePrompt, voting_count int, 
   mappedClients map[int]*types.Client, image_index int, command string) types.MessageBody {
+
   var image_data = "" // image to be sent to front end again
 
   var player_one_id = ""
@@ -111,30 +118,33 @@ func CreatePromptMessage(promptData map[int][]PeePrompt, voting_count int,
 
   var player_two_id = ""
   var player_two_prompt = ""
-  var counter = 0
-  fmt.Println("Looping over clients in promptData now")
-  fmt.Println("voting_count")
-  fmt.Println(voting_count)
+  counter := 0
+  fmt.Println("Looping through promptData before error")
+  for pr, arr := range promptData {
+    // this might be the player image id I think?
+    fmt.Printf("Player id: %v\n", pr)
+    for _, e := range arr {
+      fmt.Printf("id: %v, prompt: %s\n", e.PlayerID, e.Prompt)
+    }
+  }
+
   for client, _ := range promptData {
-    fmt.Println("client is")
-    fmt.Println(client)
     if client == 0 {
       // it should never get here but just in case
       continue
     }
     if counter != voting_count {
-      fmt.Println("counter is ")
-      fmt.Println(counter)
       counter++
       continue
+    }
+    if _, ok := mappedClients[client]; !ok {
+      fmt.Printf("UH OH CLIENT %v NOT FOUND WHAT", client)
     }
     image_data = mappedClients[client].Images[image_index]
 
     //player one data
     player_one_id = strconv.Itoa(promptData[client][0].PlayerID)
     player_one_prompt = promptData[client][0].Prompt
-    fmt.Println("Player one prompt?")
-    fmt.Println(player_one_prompt)
     //player two data
     player_two_id = strconv.Itoa(promptData[client][1].PlayerID)
     player_two_prompt = promptData[client][1].Prompt

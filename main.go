@@ -5,6 +5,7 @@ import (
 	"fake.com/pkg/mugshots"
 	"fake.com/pkg/types"
 	"fake.com/pkg/websocket"
+  "fake.com/pkg/logger"
 	"fmt"
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
@@ -21,7 +22,7 @@ var rooms map[string]types.Pool
 func playerWs(w http.ResponseWriter, r *http.Request) {
 	conn, err := websocket.Upgrade(w, r)
 	if err != nil {
-		fmt.Println("SOMETHING WENT WRONG HERE OH NO")
+		logger.LogError("SOMETHING WENT WRONG HERE OH NO")
 		fmt.Fprintf(w, "%+v\n", err)
 	}
 
@@ -30,12 +31,7 @@ func playerWs(w http.ResponseWriter, r *http.Request) {
 	name := querycode[len(querycode)-1]
 
 	fmt.Println(querycode)
-	fmt.Printf("Player is uhhh joining?")
-
-	fmt.Printf("The Room Code")
-	fmt.Println(code)
-	fmt.Printf("The Player Name")
-	fmt.Println(name)
+	logger.Log("Player is uhhh joining?")
 
 	if val, ok := rooms[code]; ok {
 		fmt.Println(val)
@@ -47,10 +43,10 @@ func playerWs(w http.ResponseWriter, r *http.Request) {
 			State: 0,
 		}
 		rooms[code].Register <- client
-		fmt.Println("joined!")
+		logger.Log("joined!")
 		client.Read()
 	} else {
-		fmt.Printf("We have errrrrrr")
+		logger.LogError("We have errrrrrr")
 	}
 
 }
@@ -118,7 +114,7 @@ func generateRoomCode() string {
 		"U", "V", "W", "X", "Y",
 		"Z"}
 
-	numbers := [10]string{"0", "1", "2", "3",
+	numbers := [9]string{"1", "2", "3",
 		"4", "5", "6", "7",
 		"8", "9"}
 
@@ -135,12 +131,9 @@ func generateRoomCode() string {
 			}
 		}
 
-		if value, ok := rooms[code]; ok {
-			fmt.Println(value)
-		} else {
-			fmt.Println(code)
+		if _, ok := rooms[code]; !ok {
 			return code
-		}
+    }
 
 	}
 }
@@ -150,7 +143,7 @@ func preFlight(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-
+  logger.Log("Starting Server")
 	//rooms
 	rooms = make(map[string]types.Pool)
 	//router
@@ -158,11 +151,11 @@ func main() {
 	router.HandleFunc("/join", joinRoom).Methods("POST")
 	router.HandleFunc("/join", preFlight).Methods("OPTIONS")
 	router.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-		log.Println("Loggin here")
+		logger.Log("Loggin here")
 		serveWs(w, r)
 	})
 	router.HandleFunc("/cws/{key}/{name}", func(w http.ResponseWriter, r *http.Request) {
-		log.Println("Player Loggin here")
+		logger.Log("Player Loggin here")
 		playerWs(w, r)
 	})
 	//HandleFuncEx("/join", joinRoom)

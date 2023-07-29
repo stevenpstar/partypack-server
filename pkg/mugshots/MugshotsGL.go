@@ -6,6 +6,7 @@ import (
 
 	"fake.com/pkg/logic"
 	"fake.com/pkg/types"
+	"fake.com/pkg/logger"
 )
 
 // Game State "Enum"
@@ -24,6 +25,7 @@ const (
   PLAYER_PROMPT string = "PD"
   PROMPT_VOTE   string = "PV"
   VOTE_START    string = "VS"
+  NEXT_VOTE     string = "NEXTVOTE"
 )
 
 // Prompt State sub-state
@@ -32,11 +34,32 @@ const (
   VOTING = 1
 )
 
+func stateToString(state int) string {
+  stateString := ""
+  switch state {
+  case START:
+    stateString = "START"
+  case FIRST_IMG:
+    stateString = "FIRST_IMG"
+  case FIRST_PROMPT:
+  logger.Log("FIRST_PROMPT")
+  case SECOND_PROMPT:
+    logger.Log("SECOND_PROMPT")
+  case SECOND_IMG:
+  logger.Log("SECOND_IMG")
+  case THIRD_PROMPT:
+    logger.Log("THIRD_PROMPT")
+  default:
+    logger.LogError("NOT A STATE!")
+  }
+  return stateString
+}
+
 //var prompt_ones PromptOnes;
 var prompt_ones Prompts
 var pImages []PlayerImage
 var pairedAllData logic.AllData
-var mugshotCount int
+var promptData map[int][]PeePrompt
 // voting vars to keep track of voting rounds
 var prompt_state = WAITING
 var voting_count = 0
@@ -93,14 +116,18 @@ func (m MugshotsGL) CheckAllPlayers(pool *types.Pool) bool {
 
 func (m MugshotsGL) CheckAllPlayersAreState(pool *types.Pool, state int) bool {
 	var allPlayers = true
+  stateString := stateToString(pool.State)
 	for c := range pool.Clients {
 		if c.State != state && c.ID != 0 {
-      fmt.Println("Player not at state")
+      logger.LogError("Player not at state" + stateString)
       fmt.Println(c.Name)
 			allPlayers = false
 			break
 		}
 	}
+  if allPlayers == true {
+    logger.Log("Players are all at state" + stateString)
+  }
 	return allPlayers
 }
 
@@ -110,7 +137,7 @@ func (m MugshotsGL) GetGameState(pool *types.Pool) int {
 
 func (m MugshotsGL) HandleMessage(message types.Message, pool *types.Pool) {
 
-  fmt.Println(message);
+//  fmt.Println(message);
 
   var allData logic.AllData
   var mappedClients map[int]*types.Client
@@ -121,8 +148,7 @@ func (m MugshotsGL) HandleMessage(message types.Message, pool *types.Pool) {
 
       if m.CheckAllPlayersAreState(pool, FIRST_IMG) {
         allData = GetPlayerImageData(pool.Clients)
-        mugshotCount = len(allData.Images)
-        pairedAllData = allData
+        pairedAllData = allData // saves to persistent variable
         mappedClients = MapClients(pool.Clients)
 
         for p := range allData.Players {
@@ -148,15 +174,14 @@ func (m MugshotsGL) HandleMessage(message types.Message, pool *types.Pool) {
       break
     case PLAYER_PROMPT:
       HandlePlayerPrompt(pool.Clients, message.Body.Body)
-      fmt.Println("Received player prompt")
       if m.CheckAllPlayersAreState(pool, FIRST_PROMPT) {
-          fmt.Println("All players promptin")
           // we need to set the sub-state to voting
           prompt_state = WAITING
           voting_count = 0
  //       allData = GetPlayerPromptData(pool.Clients)
           mappedClients = MapClients(pool.Clients)
-          var promptData = GetPlayerPromptData(mappedClients, pairedAllData)
+          promptData = GetPlayerPromptData(mappedClients, pairedAllData)
+          // I don't think nonVotingClients does anything atm
           nonVotingClients = AddNonVotingClients(promptData)
           votedClients = ResetVotedClients(pool.Clients, nonVotingClients)
           if (prompt_state == WAITING) {
@@ -166,6 +191,15 @@ func (m MugshotsGL) HandleMessage(message types.Message, pool *types.Pool) {
               Body: currentMessage})
           }
       }
+      break
+    case NEXT_VOTE:
+      logger.Log("We are going to the next vote now")
+      voting_count++
+      mappedClients = MapClients(pool.Clients)
+      currentMessage = CreatePromptMessage(promptData, voting_count,
+        mappedClients, 0, "VOTESEND")
+      mappedClients[0].Conn.WriteJSON(types.Message{Type: 2,
+        Body: currentMessage})
       break
     case VOTE_START:
       currentMessage.Command = "START_VOTE"
@@ -178,11 +212,19 @@ func (m MugshotsGL) HandleMessage(message types.Message, pool *types.Pool) {
       var waitMessage = types.MessageBody{Body: waiting_actions, Command: "WAITVOTE"}
 
       for _C := range pool.Clients {
-        if logic.Contains(nonVotingClients, _C.ID) {
+        // Changing this to have every body voting on everything.
+        // This is a temporary change to avoid a weird bug in the play test
+        // Will need to be fixed going forward.
+        // if logic.Contains(nonVotingClients, _C.ID) {
 
-          _C.Conn.WriteJSON(types.Message{Type: 2,
-            Body: waitMessage})
+        //   _C.Conn.WriteJSON(types.Message{Type: 2,
+        //     Body: waitMessage})
 
+        // } 
+        if _C.ID == 0 {
+          // don't od anything?? ? ?? ? 
+           _C.Conn.WriteJSON(types.Message{Type: 2,
+             Body: waitMessage})
         } else {
           _C.Conn.WriteJSON(types.Message{Type: 2,
             Body: currentMessage})
@@ -221,6 +263,7 @@ func (m MugshotsGL) HandleMessage(message types.Message, pool *types.Pool) {
           }
                    
           if HaveAllPlayersVoted() {
+            fmt.Println("All players have voted")
             // send message to game client that all votes are in
             for client := range pool.Clients {
               // Game Client Id will always be 0
@@ -230,12 +273,16 @@ func (m MugshotsGL) HandleMessage(message types.Message, pool *types.Pool) {
                   Body: types.MessageBody{Body: nil, Command: "ALLVOTED"}})
               }
             }
+          } else {
+            fmt.Println("Not all players have voted")
           }
         } else {
           fmt.Println("Error with player vote")
         }
         break
       }
+      break
+    default:
       break
   }
   for client, _ := range pool.Clients {
@@ -286,7 +333,8 @@ func HaveAllPlayersVoted() bool {
     return allVoted
   }
   for player, voted := range votedClients {
-    if player <= 1 || voted <= 1 {
+    fmt.Printf("player: %v, voted: %v\n", player, voted)
+    if voted < 1 {
       allVoted = false
     }
   }

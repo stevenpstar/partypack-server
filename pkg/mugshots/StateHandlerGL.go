@@ -3,6 +3,7 @@ package mugshots
 import (
 	"fake.com/pkg/logic"
 	"fake.com/pkg/types"
+  "fmt"
 )
 
 func GetPlayerImageData(clients map[*types.Client]bool) logic.AllData {
@@ -33,6 +34,15 @@ func GetPlayerPromptData(clients map[int]*types.Client, allData logic.AllData) m
       var id = pImages[imageId]
       var peePrompt = createPeePrompt(clients, allData.Players[p].PlayerId, imageId)
       promptMap[id] = append(promptMap[id], peePrompt)
+    }
+  }
+
+  // TODO remove this temporary printing of the prompt map
+  for pr, arr := range promptMap {
+    // this might be the player image id I think?
+    fmt.Printf("Player id: %v\n", pr)
+    for _, e := range arr {
+      fmt.Printf("id: %v, prompt: %s\n", e.PlayerID, e.Prompt)
     }
   }
 
