@@ -4,15 +4,22 @@ import (
 	"strconv"
 	"fake.com/pkg/logic"
 	"fake.com/pkg/types"
-  "fmt"
 )
 
 // Message Names (indicating type of data associated with this action)
 const (
   PLAYER_NAME string = "PlayerName"
-  IMAGE string = "image"
-  PROMPTONE string = "prompt1"
-  PROMPTTWO string = "prompt2"
+  IMAGE              = "image"
+  PROMPTONE          = "prompt1"
+  PROMPTTWO          = "prompt2"
+)
+
+const (
+  MsgPlayerImage string = "MSPIMAGE"
+  MsgPromptOneID        = "MSPROMPTONE_ID"
+  MsgPromptOne          = "MSPROMPTONE"
+  MsgPromptTwoID        = "MSPROMPTTWO_ID"
+  MsgPromptTwo          = "MSPROMPTTWO"
 )
 
 func HandlePlayerImage(clients map[*types.Client]bool, 
@@ -104,79 +111,37 @@ func CreateImageMessage(allData logic.AllData, mappedClients map[int]*types.Clie
   return types.MessageBody{Body: actions, Command: command}
 }
 
+func createAction(name string, data string) types.Action {
+  return types.Action {
+    Name: name,
+    Data: data,
+  }
+} 
+
 // This seems to be creating the message that will be sent to the front end
 // During the voting round, a single image and two (different) player prompts.
 // * We are changing this to send all vote information for the round... because
 // why the fuck not? *
-func CreatePromptMessage(promptData map[int][]PeePrompt, voting_count int, 
-  mappedClients map[int]*types.Client, image_index int, command string) types.MessageBody {
+func CreatePromptMessage(voteData []VotePrompt, mappedClients map[int]*types.Client,
+  image_index int, command string) types.MessageBody {
 
-  var image_data = "" // image to be sent to front end again
-
-  var player_one_id = ""
-  var player_one_prompt = ""
-
-  var player_two_id = ""
-  var player_two_prompt = ""
-  counter := 0
-  fmt.Println("Looping through promptData before error")
-  for pr, arr := range promptData {
-    // this might be the player image id I think?
-    fmt.Printf("Player id: %v\n", pr)
-    for _, e := range arr {
-      fmt.Printf("id: %v, prompt: %s\n", e.PlayerID, e.Prompt)
+  var vote VotePrompt
+  for _, v := range voteData {
+    if !v.Voted {
+      vote = v
+      break
     }
-  }
-
-  for client, _ := range promptData {
-    if client == 0 {
-      // it should never get here but just in case
-      continue
-    }
-    if counter != voting_count {
-      counter++
-      continue
-    }
-    if _, ok := mappedClients[client]; !ok {
-      fmt.Printf("UH OH CLIENT %v NOT FOUND WHAT", client)
-    }
-    image_data = mappedClients[client].Images[image_index]
-
-    //player one data
-    player_one_id = strconv.Itoa(promptData[client][0].PlayerID)
-    player_one_prompt = promptData[client][0].Prompt
-    //player two data
-    player_two_id = strconv.Itoa(promptData[client][1].PlayerID)
-    player_two_prompt = promptData[client][1].Prompt
   }
 
   var actions []types.Action
 
-  var image types.Action
-  image.Name = "MSPIMAGE"
-  image.Data = image_data
+  img := createAction(MsgPlayerImage, mappedClients[vote.ID].Images[image_index])
+  p1_id := createAction(MsgPromptOneID, strconv.Itoa(vote.PromptOne.PlayerID))
+  p1 := createAction(MsgPromptOne, vote.PromptOne.Prompt)
+  p2_id := createAction(MsgPromptTwoID, strconv.Itoa(vote.PromptTwo.PlayerID))
+  p2 := createAction(MsgPromptTwo, vote.PromptTwo.Prompt)
 
-  var prompt1_id types.Action
-  prompt1_id.Name = "MSPROMPTONE_ID"
-  prompt1_id.Data = player_one_id
-
-  var prompt1 types.Action
-  prompt1.Name = "MSPROMPTONE"
-  prompt1.Data = player_one_prompt
-
-  var prompt2_id types.Action
-  prompt2_id.Name = "MSPROMPTTWO_ID"
-  prompt2_id.Data = player_two_id
-
-  var prompt2 types.Action
-  prompt2.Name = "MSPROMPTTWO"
-  prompt2.Data = player_two_prompt
-
-  actions = append(actions, image)
-  actions = append(actions, prompt1_id)
-  actions = append(actions, prompt1)
-  actions = append(actions, prompt2_id)
-  actions = append(actions, prompt2)
+  actions = append(actions, img, p1_id, p1, p2_id, p2)
 
   return types.MessageBody{Body: actions, Command: command}
 }

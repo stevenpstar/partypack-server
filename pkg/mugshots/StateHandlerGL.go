@@ -23,6 +23,47 @@ type PeePrompt struct {
   Prompt   string
 }
 
+type VotePrompt struct {
+  ID int
+  PromptOne PeePrompt
+  PromptTwo PeePrompt
+  Voted bool
+}
+
+func SetVoted(voteData []VotePrompt) {
+  for _, v := range voteData {
+    if !v.Voted {
+      v.Voted = true
+      break
+    }
+  }
+  fmt.Println("End of round?")
+}
+
+func CreateRoundVoteData(promptData map[int][]PeePrompt) []VotePrompt {
+    var voteData []VotePrompt
+    for id, prmpt := range promptData {
+      // check "peeprompt" (terrible name) is of len(2)
+      if len(prmpt) != 2 {
+        fmt.Println("Error with pee prompt")
+        break
+      }
+      if id == 0 {
+        // This is the game client, they will not vote.
+        // TODO also exclude users who created a prompt this round (future)
+        continue
+      }
+      vPrompt := VotePrompt{
+        ID: id,
+        PromptOne: prmpt[0],
+        PromptTwo: prmpt[1],
+        Voted: false,
+      }
+      voteData = append(voteData, vPrompt)
+    }
+    return voteData
+}
+
 func GetPlayerPromptData(clients map[int]*types.Client, allData logic.AllData) map[int][]PeePrompt {
   // prompt map structure
   // {id of client image: [{playerId: number, prompt: string}, {playerId: number, prompt: string}]

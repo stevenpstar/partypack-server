@@ -60,6 +60,7 @@ var prompt_ones Prompts
 var pImages []PlayerImage
 var pairedAllData logic.AllData
 var promptData map[int][]PeePrompt
+var voteData []VotePrompt
 // voting vars to keep track of voting rounds
 var prompt_state = WAITING
 var voting_count = 0
@@ -174,18 +175,21 @@ func (m MugshotsGL) HandleMessage(message types.Message, pool *types.Pool) {
       break
     case PLAYER_PROMPT:
       HandlePlayerPrompt(pool.Clients, message.Body.Body)
+      fmt.Println("Received Player Prompt")
       if m.CheckAllPlayersAreState(pool, FIRST_PROMPT) {
+          fmt.Println("We have received all prompts")
           // we need to set the sub-state to voting
           prompt_state = WAITING
           voting_count = 0
  //       allData = GetPlayerPromptData(pool.Clients)
           mappedClients = MapClients(pool.Clients)
           promptData = GetPlayerPromptData(mappedClients, pairedAllData)
+          voteData = CreateRoundVoteData(promptData)
           // I don't think nonVotingClients does anything atm
           nonVotingClients = AddNonVotingClients(promptData)
           votedClients = ResetVotedClients(pool.Clients, nonVotingClients)
           if (prompt_state == WAITING) {
-            currentMessage = CreatePromptMessage(promptData, voting_count, mappedClients,
+            currentMessage = CreatePromptMessage(voteData, mappedClients,
               0, "VOTESEND")
             mappedClients[0].Conn.WriteJSON(types.Message{Type: 2,
               Body: currentMessage})
@@ -193,11 +197,15 @@ func (m MugshotsGL) HandleMessage(message types.Message, pool *types.Pool) {
       }
       break
     case NEXT_VOTE:
-      logger.Log("We are going to the next vote now")
+      fmt.Println("Printing out body")
+      for _, v := range message.Body.Body {
+        fmt.Println(v)
+      }
+      fmt.Println(message.Body)
+      SetVoted(voteData)
       voting_count++
       mappedClients = MapClients(pool.Clients)
-      currentMessage = CreatePromptMessage(promptData, voting_count,
-        mappedClients, 0, "VOTESEND")
+      currentMessage = CreatePromptMessage(voteData, mappedClients, 0, "VOTESEND")
       mappedClients[0].Conn.WriteJSON(types.Message{Type: 2,
         Body: currentMessage})
       break
